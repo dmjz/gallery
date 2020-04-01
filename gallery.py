@@ -12,8 +12,8 @@ def list_images(folder):
     """ Return list of image filenames in folder """
 
     return [
-        f for f in os.listdir(folder) 
-        if os.path.splitext(f)[-1] in FILE_EXTENSIONS
+        f for g in IMG_GLOBS 
+        for f in glob.glob(os.path.join(folder, g))
     ]
 
 def open_image(folder, image):
@@ -34,12 +34,22 @@ def thumbnails(imgDestPair):
         im.save(os.path.join(dest, f'{ size }_{ name }'))
 
 def make_thumbnails(src, dest):
-    """ Make thumbnails from src images in the dest folder """
+    """ Make thumbnails from src images in the dest folder 
+        Return number of images processed
+    """
 
-    images = [f for g in IMG_GLOBS for f in glob.glob(os.path.join(src, g))]
-    numThreads = 8 if len(images) > 63 else 4
-    pool = Pool(numThreads)
-    pool.map(thumbnails, [(img, dest) for img in images])
+    images = list_images(src)
+    L = len(images)
+    if L < 8:
+        # No multithreading
+        for img in images:
+            thumbnails((img, dest))
+    else:
+        # Yes multithreading
+        numThreads = 4 if L < 64 else 8
+        pool = Pool(numThreads)
+        pool.map(thumbnails, [(img, dest) for img in images])
+    return L
 
 def window_event_loop(window, context):
     """ Handle window events and return result """

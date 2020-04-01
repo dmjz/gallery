@@ -4,6 +4,7 @@ if __name__ == '__main__':
     import shutil
     import secrets
     import random
+    from timeit import default_timer as timer
     from gallery import *
 
     def sample_gallery_folder():
@@ -37,13 +38,19 @@ if __name__ == '__main__':
         """ Test thumbnail creation """
 
         testDir = '.test_thumbnail'
-        src = os.path.join(testDir, 'src')
-        print(os.listdir(src))
-        dest = os.path.join(testDir, 'dest')
-        try: shutil.rmtree(dest);
-        except FileNotFoundError: pass;
-        os.makedirs(dest)
-        make_thumbnails(src, dest)
+        for srcLeaf in ('src_small', 'src_med', 'src_large'):
+            src = os.path.join(testDir, srcLeaf)
+            dest = os.path.join(testDir, 'dest')
+            try: 
+                shutil.rmtree(dest)
+            except FileNotFoundError: 
+                pass
+            os.makedirs(dest)
+            start = timer()
+            numImages = make_thumbnails(src, dest)
+            end = timer()
+            print(f'Thumbnail test runtime for { srcLeaf }:')
+            print(f'{ end-start } seconds, { (end-start)/numImages } sec/file')
 
 
     # test_show_window()
