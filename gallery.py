@@ -5,9 +5,7 @@ from PIL import Image
 from multiprocessing import Pool
 
 sg.theme('Dark Blue')
-FILE_EXTENSIONS = [
-    '.jpg', '.jpeg', '.png',
-]
+IMG_GLOBS = ('*.jpg', '*.jpeg', '*.png')
 THUMBNAIL_SIZES = (1280, 1024, 768, 512)
 
 def list_images(folder):
@@ -24,18 +22,24 @@ def open_image(folder, image):
     im = Image.open(os.path.join(folder, image))
     im.show()
 
-def thumbnails(image):
-    """ Yield thumbnails in decreasing sizes """
+def thumbnails(imgDestPair):
+    """ Save thumbnails in decreasing sizes """
 
+    image, dest = imgDestPair
     im = Image.open(image)
+    name = os.path.basename(image)
     for size in THUMBNAIL_SIZES:
         im.thumbnail((size, size))
-        yield im.copy()
+        im.copy()
+        im.save(os.path.join(dest, f'{ size }_{ name }'))
 
 def make_thumbnails(src, dest):
     """ Make thumbnails from src images in the dest folder """
 
-    pass
+    images = [f for g in IMG_GLOBS for f in glob.glob(os.path.join(src, g))]
+    numThreads = 8 if len(images) > 63 else 4
+    pool = Pool(numThreads)
+    pool.map(thumbnails, [(img, dest) for img in images])
 
 def window_event_loop(window, context):
     """ Handle window events and return result """

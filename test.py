@@ -38,16 +38,12 @@ if __name__ == '__main__':
 
         testDir = '.test_thumbnail'
         src = os.path.join(testDir, 'src')
+        print(os.listdir(src))
         dest = os.path.join(testDir, 'dest')
         try: shutil.rmtree(dest);
         except FileNotFoundError: pass;
         os.makedirs(dest)
-        for image in glob.glob(os.path.join(src, '*.jpeg')):
-            thumbs = thumbnails(image)
-            imageName = os.path.basename(image)
-            for size, thumb in zip(THUMBNAIL_SIZES, thumbs):
-                saveName = f'{ size }_{ imageName }'
-                thumb.save(os.path.join(dest, saveName))
+        make_thumbnails(src, dest)
 
 
     # test_show_window()
