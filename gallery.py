@@ -1,5 +1,6 @@
 import os
 import glob
+import math
 import PySimpleGUI as sg
 from PIL import Image
 from multiprocessing import Pool
@@ -8,11 +9,25 @@ sg.theme('Dark Blue')
 IMG_GLOBS = ('*.jpg', '*.jpeg', '*.png')
 THUMBNAIL_SIZES = (1280, 1024, 768, 512)
 
+def to_grid(arr, numCols):
+    """ Convert list to grid (list of lists) """
+
+    L = len(arr)
+    numRows = math.ceil(L/numCols)
+    return [
+        [
+            arr[row*numCols + col] if row*numCols + col < L else None
+            for col in range(numCols)
+        ]
+        for row in range(numRows)
+    ]
+
 def list_images(folder):
     """ Return list of image filenames in folder """
-
+    
     return [
-        f for g in IMG_GLOBS 
+        os.path.basename(f) 
+        for g in IMG_GLOBS 
         for f in glob.glob(os.path.join(folder, g))
     ]
 
@@ -142,6 +157,7 @@ def show_main_window():
     print(windowResult)
     window.close(); del window
 
+
 class WindowManager():
     """ Keep track of when we need to remake the window """
 
@@ -178,14 +194,13 @@ class WindowManager():
         ]
 
     def gallery_layout(self):
-        ###
-        ### TODO - a real layout here
-        ###
         if self.folderPath:
             text = f'Placeholder for { self.folderShortName }'
+            imageNameGrid = to_grid(list_images(self.folderPath), numCols=4)
+            text = str(imageNameGrid)
         else:
             text = 'Gallery will go here...'
-        return [ sg.Text(text, size=(100,10)) ]
+        return [ sg.Text(text, size=(100,40)) ]
 
     def layout(self):
         return [
