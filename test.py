@@ -57,8 +57,16 @@ if __name__ == '__main__':
 
         show_main_window()
 
+    def test_WindowManager():
+        """ Test WindowManager class """
+
+        wm = WindowManager()
+        wm.run_window()
+
+
 
     # test_show_window()
     # test_gallery_window()
     # test_thumbnails()
-    test_main_window()
+    # test_main_window()
+    test_WindowManager()

@@ -110,6 +110,9 @@ def gallery_window_event_loop(window):
         window['folder_name'].update(folderName)
         show_window(folder)
 
+    def image_grid(folder):
+        [os.path.basename(name) for name in  list_images(folder)]
+
     while True:
         event, values = window.read()
         print(event, values)
@@ -120,7 +123,6 @@ def gallery_window_event_loop(window):
         if event == sg.TIMEOUT_KEY:
             continue
             
-
 def show_main_window():
     """ Select folder and view image grid """
 
@@ -130,6 +132,9 @@ def show_main_window():
             sg.FolderBrowse('Open gallery', target='select_folder'),
             sg.Text('Folder: ', key='folder_name', size=(60,1)),
         ],
+        [
+            sg.Column()
+        ]
         [sg.Debug()],
     ]
     window = sg.Window('Gallery', layout)
@@ -137,3 +142,70 @@ def show_main_window():
     print(windowResult)
     window.close(); del window
 
+class WindowManager():
+    """ Keep track of when we need to remake the window """
+
+    selectFolderKey = 'select_folder'
+
+    def __init__(self):
+        self.folderPath = None
+        self.window = None
+
+    @property
+    def folderShortName(self):
+        if not self.folderPath:
+            return ''
+        return os.path.basename(self.folderPath)
+
+    def window_event_loop(self):
+        while True:
+            event, values = self.window.read()
+            print(event, values)
+            if event is None:
+                return event
+            if event is self.selectFolderKey:
+                self.folderPath = values[self.selectFolderKey]
+                return event
+            #  We may have more interesting events in the future...
+            if event == sg.TIMEOUT_KEY:
+                continue
+
+    def menu_layout(self):
+        return [
+            sg.InputText(key=self.selectFolderKey, enable_events=True, visible=False), 
+            sg.FolderBrowse('Open gallery', target=self.selectFolderKey),
+            sg.Text(f'Folder: { self.folderShortName }', size=(60,1)),
+        ]
+
+    def gallery_layout(self):
+        ###
+        ### TODO - a real layout here
+        ###
+        if self.folderPath:
+            text = f'Placeholder for { self.folderShortName }'
+        else:
+            text = 'Gallery will go here...'
+        return [ sg.Text(text, size=(100,10)) ]
+
+    def layout(self):
+        return [
+            self.menu_layout(),
+            self.gallery_layout(),
+            [sg.Debug()],
+        ]
+
+    def remake_window(self):
+        newWindow = sg.Window('Gallery', self.layout())
+
+    def close_window(self):
+        if self.window:
+            self.window.close()
+            del self.window
+
+    def run_window(self):
+        eventLoopResult = True
+        while eventLoopResult:
+            newWindow = sg.Window('Gallery', self.layout())
+            self.close_window()
+            self.window = newWindow
+            eventLoopResult = self.window_event_loop()
