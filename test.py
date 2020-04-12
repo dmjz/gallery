@@ -52,7 +52,13 @@ if __name__ == '__main__':
             print(f'Thumbnail test runtime for { srcLeaf }:')
             print(f'{ end-start } seconds, { (end-start)/numImages } sec/file')
 
+    def test_main_window():
+        """ Test the main_window """
+
+        show_main_window()
+
 
     # test_show_window()
     # test_gallery_window()
-    test_thumbnails()
+    # test_thumbnails()
+    test_main_window()

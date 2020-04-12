@@ -69,7 +69,7 @@ def show_window(folder):
 
     imageTextLayout = [[
         sg.Listbox(
-            values=list_images(folder), 
+            values=[os.path.basename(name) for name in  list_images(folder)], 
             bind_return_key=True,
             key='Image List',
             size=(30,40),
@@ -77,26 +77,12 @@ def show_window(folder):
     ]]
     buttonLayout = [[sg.Button('Cancel')]]
     layout = imageTextLayout + buttonLayout
-    title = f'Folder: { folder }'
+    folderName = os.path.basename(folder)
+    title = f'Folder: { folderName }'
     window = sg.Window(title, layout)
     windowResult = window_event_loop(window, {'folder': folder})
     print(windowResult)
     window.close(); del window
-
-def gallery_window_event_loop(window):
-    """ Handle window events and return result """
-
-    while True:
-        event, values = window.read()
-        print(event, values)
-        if event is None:
-            return 'Close Window'
-        if event == 'Cancel':
-            return 'Cancel'
-        if event == 'Open':
-            folder = values['input']
-            print('Open folder:', folder)
-            show_window(folder)
 
 def show_gallery_window():
     """ Show thumbnails in a gallery """
@@ -113,3 +99,41 @@ def show_gallery_window():
     windowResult = gallery_window_event_loop(window)
     print(windowResult)
     window.close(); del window
+
+def gallery_window_event_loop(window):
+    """ Handle window events and return result """
+
+    def open_folder(values):
+        folder = values['select_folder']
+        print('Open folder:', folder)
+        folderName = os.path.basename(folder)
+        window['folder_name'].update(folderName)
+        show_window(folder)
+
+    while True:
+        event, values = window.read()
+        print(event, values)
+        if event is None:
+            return 'close_window'
+        if event == 'select_folder':
+            open_folder(values)
+        if event == sg.TIMEOUT_KEY:
+            continue
+            
+
+def show_main_window():
+    """ Select folder and view image grid """
+
+    layout = [
+        [
+            sg.InputText(key='select_folder', enable_events=True, visible=False), 
+            sg.FolderBrowse('Open gallery', target='select_folder'),
+            sg.Text('Folder: ', key='folder_name', size=(60,1)),
+        ],
+        [sg.Debug()],
+    ]
+    window = sg.Window('Gallery', layout)
+    windowResult = gallery_window_event_loop(window)
+    print(windowResult)
+    window.close(); del window
+
