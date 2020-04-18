@@ -7,7 +7,10 @@ from multiprocessing import Pool
 
 sg.theme('Dark Blue')
 IMG_GLOBS = ('*.jpg', '*.jpeg', '*.png')
-THUMBNAIL_SIZES = (1280, 1024, 768, 512)
+THUMBNAIL_SIZES = (
+    ('M' , 768 ), 
+    ('S' , 400 ),
+)
 
 def to_grid(arr, numCols):
     """ Convert list to grid (list of lists) """
@@ -38,22 +41,25 @@ def open_image(folder, image):
     im.show()
 
 def thumbnails(imgDestPair):
-    """ Save thumbnails in decreasing sizes """
+    """ Save PNG thumbnails in decreasing sizes """
 
     image, dest = imgDestPair
     im = Image.open(image)
     name = os.path.basename(image)
-    for size in THUMBNAIL_SIZES:
+    name = os.path.splitext(name)[0] + '.png'
+    for prefix, size in THUMBNAIL_SIZES:
         im.thumbnail((size, size))
         im.copy()
-        im.save(os.path.join(dest, f'{ size }_{ name }'))
+        im.save(os.path.join(dest, f'{ prefix }_{ name }'))
 
-def make_thumbnails(src, dest):
+def make_thumbnails(src, dest, makeDest=True):
     """ Make thumbnails from src images in the dest folder 
         Return number of images processed
     """
 
-    images = list_images(src)
+    if makeDest:
+        os.makedirs(dest)
+    images = [os.path.join(src, img) for img in list_images(src)]
     L = len(images)
     if L < 8:
         # No multithreading
@@ -126,7 +132,7 @@ def gallery_window_event_loop(window):
         show_window(folder)
 
     def image_grid(folder):
-        [os.path.basename(name) for name in  list_images(folder)]
+        [os.path.basename(name) for name in list_images(folder)]
 
     while True:
         event, values = window.read()
@@ -162,6 +168,7 @@ class WindowManager():
     """ Keep track of when we need to remake the window """
 
     selectFolderKey = 'select_folder'
+    thumbsSubDir = '.thumbnails'
 
     def __init__(self):
         self.folderPath = None
@@ -186,6 +193,26 @@ class WindowManager():
             if event == sg.TIMEOUT_KEY:
                 continue
 
+    def thumbnail_path(self, size, img):
+        return os.path.join(
+            self.folderPath, 
+            self.thumbsSubDir, 
+            f'{ size }_{ os.path.splitext(img)[0] }.png'
+        )
+
+    def get_thumbnails(self, size='S'):
+        if self.thumbsSubDir in os.listdir(self.folderPath):
+            return [
+                self.thumbnail_path(size, img)
+                for img in list_images(self.folderPath)
+            ]
+        else:
+            make_thumbnails(
+                src=self.folderPath, 
+                dest=os.path.join(self.folderPath, self.thumbsSubDir),
+            )
+            return self.get_thumbnails(size)
+
     def menu_layout(self):
         return [
             sg.InputText(key=self.selectFolderKey, enable_events=True, visible=False), 
@@ -193,19 +220,30 @@ class WindowManager():
             sg.Text(f'Folder: { self.folderShortName }', size=(60,1)),
         ]
 
+    def gallery_element(self, data):
+        return sg.Image(data)
+
+    def gallery_row_element(self, rowData):
+        return [self.gallery_element(rd) for rd in rowData]
+
     def gallery_layout(self):
         if self.folderPath:
-            text = f'Placeholder for { self.folderShortName }'
-            imageNameGrid = to_grid(list_images(self.folderPath), numCols=4)
-            text = str(imageNameGrid)
+            thumbs = self.get_thumbnails()
+            imageNameGrid = to_grid(thumbs, numCols=4)
+            return [self.gallery_row_element(rowData) for rowData in imageNameGrid]
         else:
-            text = 'Gallery will go here...'
-        return [ sg.Text(text, size=(100,40)) ]
+            displayText = 'Gallery will go here...'
+            return [[ sg.Text(displayText, size=(100,40)) ]]
 
     def layout(self):
         return [
             self.menu_layout(),
-            self.gallery_layout(),
+            [sg.Column(
+                self.gallery_layout(), 
+                size=(1700,800), 
+                scrollable=True,
+                vertical_scroll_only=True,
+            )],
             [sg.Debug()],
         ]
 
