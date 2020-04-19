@@ -1,4 +1,6 @@
 import os
+import json
+import uuid
 import PySimpleGUI as sg
 from utils import \
     to_grid, list_images, make_thumbnails, THUMBNAIL_SIZES, \
@@ -6,6 +8,15 @@ from utils import \
 
 
 sg.theme('Dark Blue')
+
+def get_folder_id_map():
+    try:
+        with open('.metadata\\folder_id_map.json') as f: 
+            folderIdMap = json.load(f)
+    except FileNotFoundError:
+        folderIdMap = {}
+    return folderIdMap
+
 
 class WindowManager():
     """ Keep track of when we need to remake the window """
@@ -15,6 +26,7 @@ class WindowManager():
     thumbSize = 'S'
     imgDim = THUMBNAIL_SIZES[thumbSize]
     gridCols = 4
+    folderIdMap = get_folder_id_map()
 
     def __init__(self):
         self.folderPath = None
@@ -34,30 +46,40 @@ class WindowManager():
                 return event
             if event is self.selectFolderKey:
                 self.folderPath = values[self.selectFolderKey]
+                if self.folderPath:
+                    self.setup_thumbnails()
                 return event
             #  We may have more interesting events in the future...
             if event == sg.TIMEOUT_KEY:
                 continue
 
-    def thumbnail_path(self, size, img):
+    def setup_thumbnails(self):
+        if not self.folderPath:
+            raise AttributeError('Set folderPath before setup_thumbnails()')
+        if self.folderPath not in self.folderIdMap:
+            self.folderIdMap[self.folderPath] = str(uuid.uuid4())
+        folderId = self.folderIdMap[self.folderPath]
+        self.thumbnailFolder = os.path.join(
+            '.metadata', folderId, self.thumbsSubDir
+        )
+        try:
+            os.makedirs(self.thumbnailFolder, exist_ok=False)
+        except FileExistsError:
+            pass
+        else:
+            make_thumbnails(self.folderPath, self.thumbnailFolder, makeDest=False)
+
+    def thumbnail_path(self, img):
         return os.path.join(
-            self.folderPath, 
-            self.thumbsSubDir, 
-            f'{ size }_{ os.path.splitext(img)[0] }.png'
+            self.thumbnailFolder,
+            f'{ self.thumbSize }_{ os.path.splitext(img)[0] }.png',
         )
 
-    def get_thumbnails(self, size='S'):
-        if self.thumbsSubDir in os.listdir(self.folderPath):
-            return [
-                self.thumbnail_path(size, img)
-                for img in list_images(self.folderPath)
-            ]
-        else:
-            make_thumbnails(
-                src=self.folderPath, 
-                dest=os.path.join(self.folderPath, self.thumbsSubDir),
-            )
-            return self.get_thumbnails(size)
+    def thumbnail_paths(self):
+        return [
+            self.thumbnail_path(f)
+            for f in list_images(self.folderPath)
+        ]
 
     def menu_layout(self):
         return [
@@ -100,7 +122,7 @@ class WindowManager():
         ]
 
     def image_data_grid(self):
-        thumbs = self.get_thumbnails()
+        thumbs = self.thumbnail_paths()
         names = list_images(self.folderPath)
         return to_grid(
             [{'thumb': t, 'name': n} for t, n in zip(thumbs, names)], 
@@ -109,7 +131,7 @@ class WindowManager():
 
     def gallery_layout(self):
         if self.folderPath:
-            thumbs = self.get_thumbnails()
+            thumbs = self.thumbnail_paths()
             names = list_images(self.folderPath)
             rowDataDicts = [
                 {'row': row, 'imageDatas': imageDatas}
