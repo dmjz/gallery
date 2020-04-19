@@ -61,17 +61,50 @@ class WindowManager():
             sg.Text(f'Folder: { self.folderShortName }', size=(60,1)),
         ]
 
-    def gallery_element(self, data):
-        return sg.Image(data)
+    def gallery_element(self, elemData):
+        title = os.path.basename(elemData['img'])
+        layout = [
+            [   
+                sg.Image('imgs/empty_star.png'),
+                sg.Image('imgs/empty_star.png'),
+                sg.Image('imgs/empty_star.png'),
+                sg.Image('imgs/empty_star.png'),
+            ],
+            [sg.Image(elemData['thumb'])]
+        ]
+        return sg.Frame(title, layout, size=(600,400))
 
     def gallery_row_element(self, rowData):
-        return [self.gallery_element(rd) for rd in rowData]
+        return [
+            self.gallery_element(elemData={
+                'row': rowData['row'],
+                'col': col,
+                'img': data['name'],
+                'thumb': data['thumb'],
+            })
+            for col, data in enumerate(rowData['imageDatas'])
+        ]
+
+    def image_data_grid(self):
+        thumbs = self.get_thumbnails()
+        names = list_images(self.folderPath)
+        return to_grid(
+            [{'thumb': t, 'name': n} for t, n in zip(thumbs, names)], 
+            numCols = 4,
+        )
 
     def gallery_layout(self):
         if self.folderPath:
             thumbs = self.get_thumbnails()
-            imageNameGrid = to_grid(thumbs, numCols=4)
-            return [self.gallery_row_element(rowData) for rowData in imageNameGrid]
+            names = list_images(self.folderPath)
+            rowDataDicts = [
+                {'row': row, 'imageDatas': imageDatas}
+                for row, imageDatas in enumerate(self.image_data_grid())
+            ]
+            return [
+                self.gallery_row_element(rowData)
+                for row, rowData in enumerate(rowDataDicts)
+            ]
         else:
             displayText = 'Gallery will go here...'
             return [[ sg.Text(displayText, size=(100,40)) ]]
@@ -103,7 +136,6 @@ class WindowManager():
             self.close_window()
             self.window = newWindow
             eventLoopResult = self.window_event_loop()
-
 
 
 if __name__ == '__main__':

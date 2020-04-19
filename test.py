@@ -43,12 +43,13 @@ if __name__ == '__main__':
         wm = WindowManager()
         wm.folderPath = local_secrets.testGalleryLayoutFolderPath
         return {
+            'wm': wm,
             'menu': wm.menu_layout(),
             'gallery': wm.gallery_layout(),
             'full': wm.layout(),
         }
 
-    
+
     # test_thumbnails()
     test_WindowManager()
     # d =  test_layout_components()
