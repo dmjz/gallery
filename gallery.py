@@ -1,6 +1,8 @@
 import os
 import PySimpleGUI as sg
-from utils import to_grid, list_images, make_thumbnails
+from utils import \
+    to_grid, list_images, make_thumbnails, THUMBNAIL_SIZES, \
+    image_size
 
 
 sg.theme('Dark Blue')
@@ -10,6 +12,9 @@ class WindowManager():
 
     selectFolderKey = 'select_folder'
     thumbsSubDir = '.thumbnails'
+    thumbSize = 'S'
+    imgDim = THUMBNAIL_SIZES[thumbSize]
+    gridCols = 4
 
     def __init__(self):
         self.folderPath = None
@@ -63,6 +68,11 @@ class WindowManager():
 
     def gallery_element(self, elemData):
         title = os.path.basename(elemData['img'])
+        if len(title) > 50:
+            title = '...' + title[-47:]
+        imgSize = image_size(elemData['thumb'])
+        xPad = (self.imgDim - imgSize[0])//2
+        yPad = (self.imgDim - imgSize[1])//2
         layout = [
             [   
                 sg.Image('imgs/empty_star.png'),
@@ -70,9 +80,12 @@ class WindowManager():
                 sg.Image('imgs/empty_star.png'),
                 sg.Image('imgs/empty_star.png'),
             ],
-            [sg.Image(elemData['thumb'])]
+            [sg.Image(elemData['thumb'], pad=(xPad, yPad))],
         ]
-        return sg.Frame(title, layout, size=(600,400))
+        return sg.Frame(
+            title, layout, 
+            element_justification = 'center'
+        )
 
     def gallery_row_element(self, rowData):
         return [
@@ -83,6 +96,7 @@ class WindowManager():
                 'thumb': data['thumb'],
             })
             for col, data in enumerate(rowData['imageDatas'])
+            if data
         ]
 
     def image_data_grid(self):
@@ -90,7 +104,7 @@ class WindowManager():
         names = list_images(self.folderPath)
         return to_grid(
             [{'thumb': t, 'name': n} for t, n in zip(thumbs, names)], 
-            numCols = 4,
+            numCols = self.gridCols,
         )
 
     def gallery_layout(self):
@@ -114,9 +128,9 @@ class WindowManager():
             self.menu_layout(),
             [sg.Column(
                 self.gallery_layout(), 
-                size=(1700,800), 
-                scrollable=True,
-                vertical_scroll_only=True,
+                size = (self.gridCols*self.imgDim + 100, 2*self.imgDim), 
+                scrollable = True,
+                vertical_scroll_only = True,
             )],
             [sg.Debug()],
         ]

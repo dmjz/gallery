@@ -6,9 +6,8 @@ from multiprocessing import Pool
 
 
 IMG_GLOBS = ('*.jpg', '*.jpeg', '*.png')
-THUMBNAIL_SIZES = (
-    ('S' , 400 ),
-)
+THUMBNAIL_SIZES = {'S': 400}
+THUMBNAIL_SIZE_ITEMS = list(THUMBNAIL_SIZES.items())
 
 def to_grid(arr, numCols):
     """ Convert list to grid (list of lists) """
@@ -45,7 +44,7 @@ def thumbnails(imgDestPair):
     im = Image.open(image)
     name = os.path.basename(image)
     name = os.path.splitext(name)[0] + '.png'
-    for prefix, size in THUMBNAIL_SIZES:
+    for prefix, size in THUMBNAIL_SIZE_ITEMS:
         im.thumbnail((size, size))
         im.copy()
         im.save(os.path.join(dest, f'{ prefix }_{ name }'))
@@ -69,3 +68,6 @@ def make_thumbnails(src, dest, makeDest=True):
         pool = Pool(numThreads)
         pool.map(thumbnails, [(img, dest) for img in images])
     return L
+
+def image_size(filepath):
+    return Image.open(filepath).size
