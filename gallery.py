@@ -6,37 +6,96 @@ from utils import \
     to_grid, list_images, make_thumbnails, THUMBNAIL_SIZES, \
     image_size
 
-
 sg.theme('Dark Blue')
 
-def get_folder_id_map():
-    try:
-        with open('.metadata\\folder_id_map.json') as f: 
-            folderIdMap = json.load(f)
-    except FileNotFoundError:
-        folderIdMap = {}
-    return folderIdMap
+
+class FolderData():
+    """ Load, edit, save folder metadata """
+
+    thumbsSubDir = '.t'
+    ###
+    ### TODO: load all folder data right away
+    ###
+    allFolderData = {}
+    ###
+
+    def __init__(self):
+        self.openFolderPath = None
+        self.openFolderData = None
+        self.settings = None
+
+    def open_folder(self, folderPath, settings):
+        # For now, just set up thumbnails
+        self.openFolderPath = folderPath
+        self.settings = settings
+        self.openFolderData = self.get_folder_data(self.openFolderPath)
+        return True
+
+    def get_folder_data(self, folderPath):
+        if folderPath in self.allFolderData:
+            ###
+            ### TODO: "data completeness checks", e.g. are there thumbnails
+            ### of the right size (based on settings) for each image...
+            ###
+            return allFolderData[folderPath]
+        return self.new_folder_data(folderPath)
+    
+    def new_folder_data(self, folderPath):
+        folderData = {}
+        folderData['path'] = folderPath
+        folderData['uid'] = str(uuid.uuid4())
+        folderData['thumbnailFolder'] = os.path.join(
+            '.metadata', folderData['uid'], self.thumbsSubDir
+        )
+        folderData['shortName'] = os.path.basename(folderPath)
+        folderData['ratings'] = {
+            img: None for img in list_images(folderPath)
+        }
+        try:
+            os.makedirs(folderData['thumbnailFolder'], exist_ok=False)
+        except FileExistsError:
+            pass
+        make_thumbnails(folderPath, folderData['thumbnailFolder'], makeDest=False)
+        return folderData
+
+    @property
+    def folderShortName(self):
+        return self.openFolderData['shortName'] if self.openFolderData else ''
+
+    def thumbnail_paths(self):
+        thumbnailFolder = self.openFolderData['thumbnailFolder']
+        size = self.settings['thumbSize']
+        return [
+            os.path.join(
+                thumbnailFolder,
+                f'{ size }_{ os.path.splitext(img)[0] }.png',
+            )
+            for img in self.images()
+        ]
+
+    def images(self):
+        return list_images(self.openFolderPath)
 
 
 class WindowManager():
     """ Keep track of when we need to remake the window """
 
     selectFolderKey = 'select_folder'
-    thumbsSubDir = '.thumbnails'
     thumbSize = 'S'
     imgDim = THUMBNAIL_SIZES[thumbSize]
     gridCols = 4
-    folderIdMap = get_folder_id_map()
+    folderData = FolderData()
+    folderSettings = {
+        'thumbSize': thumbSize,
+    }
 
     def __init__(self):
-        self.folderPath = None
+        self.folder = None
         self.window = None
 
     @property
     def folderShortName(self):
-        if not self.folderPath:
-            return ''
-        return os.path.basename(self.folderPath)
+        return self.folderData.folderShortName if self.folder else ''
 
     def window_event_loop(self):
         while True:
@@ -45,41 +104,14 @@ class WindowManager():
             if event is None:
                 return event
             if event is self.selectFolderKey:
-                self.folderPath = values[self.selectFolderKey]
-                if self.folderPath:
-                    self.setup_thumbnails()
+                self.folder = self.folderData.open_folder(
+                    folderPath = values[self.selectFolderKey],
+                    settings   = self.folderSettings,
+                )
                 return event
             #  We may have more interesting events in the future...
             if event == sg.TIMEOUT_KEY:
                 continue
-
-    def setup_thumbnails(self):
-        if not self.folderPath:
-            raise AttributeError('Set folderPath before setup_thumbnails()')
-        if self.folderPath not in self.folderIdMap:
-            self.folderIdMap[self.folderPath] = str(uuid.uuid4())
-        folderId = self.folderIdMap[self.folderPath]
-        self.thumbnailFolder = os.path.join(
-            '.metadata', folderId, self.thumbsSubDir
-        )
-        try:
-            os.makedirs(self.thumbnailFolder, exist_ok=False)
-        except FileExistsError:
-            pass
-        else:
-            make_thumbnails(self.folderPath, self.thumbnailFolder, makeDest=False)
-
-    def thumbnail_path(self, img):
-        return os.path.join(
-            self.thumbnailFolder,
-            f'{ self.thumbSize }_{ os.path.splitext(img)[0] }.png',
-        )
-
-    def thumbnail_paths(self):
-        return [
-            self.thumbnail_path(f)
-            for f in list_images(self.folderPath)
-        ]
 
     def menu_layout(self):
         return [
@@ -89,6 +121,8 @@ class WindowManager():
         ]
 
     def gallery_element(self, elemData):
+        # print('Received gallery element elem data:')
+        # print(elemData)
         title = os.path.basename(elemData['img'])
         if len(title) > 50:
             title = '...' + title[-47:]
@@ -121,21 +155,20 @@ class WindowManager():
             if data
         ]
 
-    def image_data_grid(self):
-        thumbs = self.thumbnail_paths()
-        names = list_images(self.folderPath)
+    def image_data_grid(self, thumbs, imgNames):
         return to_grid(
-            [{'thumb': t, 'name': n} for t, n in zip(thumbs, names)], 
+            arr = [{'thumb': t, 'name': n} for t, n in zip(thumbs, imgNames)], 
             numCols = self.gridCols,
         )
 
     def gallery_layout(self):
-        if self.folderPath:
-            thumbs = self.thumbnail_paths()
-            names = list_images(self.folderPath)
+        if self.folder:
+            thumbs = self.folderData.thumbnail_paths()
+            names = self.folderData.images()
+            imgDataGrid = self.image_data_grid(thumbs=thumbs, imgNames=names)
             rowDataDicts = [
                 {'row': row, 'imageDatas': imageDatas}
-                for row, imageDatas in enumerate(self.image_data_grid())
+                for row, imageDatas in enumerate(imgDataGrid)
             ]
             return [
                 self.gallery_row_element(rowData)

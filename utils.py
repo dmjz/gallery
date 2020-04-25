@@ -59,11 +59,9 @@ def make_thumbnails(src, dest, makeDest=True):
     images = [os.path.join(src, img) for img in list_images(src)]
     L = len(images)
     if L < 8:
-        # No multithreading
         for img in images:
             thumbnails((img, dest))
     else:
-        # Yes multithreading
         numThreads = 4 if L < 64 else 8
         pool = Pool(numThreads)
         pool.map(thumbnails, [(img, dest) for img in images])
