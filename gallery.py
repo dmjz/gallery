@@ -13,16 +13,22 @@ class FolderData():
     """ Load, edit, save folder metadata """
 
     thumbsSubDir = '.t'
-    ###
-    ### TODO: load all folder data right away
-    ###
-    allFolderData = {}
-    ###
+    allFolderDataPath = os.path.join('.metadata', 'all_folder_data.json')
+    allFolderData = None
 
     def __init__(self):
         self.openFolderPath = None
         self.openFolderData = None
         self.settings = None
+        if self.allFolderData is None:
+            self.load_all_data()
+
+    def load_all_data(self):
+        try:
+            with open(self.allFolderDataPath, encoding='utf-8') as file:
+                self.allFolderData = json.load(file)
+        except FileNotFoundError:
+            self.allFolderData = {}
 
     def open_folder(self, folderPath, settings):
         # For now, just set up thumbnails
@@ -37,7 +43,7 @@ class FolderData():
             ### TODO: "data completeness checks", e.g. are there thumbnails
             ### of the right size (based on settings) for each image...
             ###
-            return allFolderData[folderPath]
+            return self.allFolderData[folderPath]
         return self.new_folder_data(folderPath)
     
     def new_folder_data(self, folderPath):
@@ -56,7 +62,13 @@ class FolderData():
         except FileExistsError:
             pass
         make_thumbnails(folderPath, folderData['thumbnailFolder'], makeDest=False)
+        self.allFolderData[folderPath] = folderData
+        self.save_folder_data()
         return folderData
+
+    def save_folder_data(self):
+        with open(self.allFolderDataPath, 'w', encoding='utf-8') as f:
+            json.dump(self.allFolderData, f)
 
     @property
     def folderShortName(self):
@@ -103,7 +115,10 @@ class WindowManager():
             print(event, values)
             if event is None:
                 return event
-            if event is self.selectFolderKey:
+            if event == self.selectFolderKey:
+                if not values[self.selectFolderKey]:
+                    # User did not select a folder
+                    continue
                 self.folder = self.folderData.open_folder(
                     folderPath = values[self.selectFolderKey],
                     settings   = self.folderSettings,
