@@ -106,8 +106,9 @@ class FolderData():
 
     def set_rating(self, image, rating):
         self.openFolderData['imageData'][image]['rating'] = rating
-        print('Updated image data after set_rating:')
-        print(self.openFolderData['imageData'][image])
+
+    def get_rating(self, image):
+        return self.openFolderData['imageData'][image]['rating']
 
 
 
@@ -150,18 +151,25 @@ class WindowManager():
                 )
                 return event
             if isinstance(event, ImageKey):
-                clickedImage, clickedElement = event
-                print('Clicked image:', event.image)
-                print('Clicked element:', event.element)
                 if event.element[:4] == 'star':
                     rating = int(event.element[-1])
                     self.folderData.set_rating(event.image, rating)
-                    ###
-                    ### TODO: update the star images to reflect new rating
-                    ###
-            #  We may have more interesting events in the future...
+                    self.update_star_display(event.image)
+                if event.element == 'img':
+                    # User clicked image itself
+                    pass
             if event == sg.TIMEOUT_KEY:
                 continue
+
+    def update_star_display(self, image):
+        # Note: imageKey = ImageKey obj obtained as event in event loop
+        rating = self.folderData.get_rating(image)
+        for i in range(4):
+            ik = ImageKey(image, f'star{ i }')
+            if rating >= i:
+                self.window[ik].update('imgs/full_star.png')
+            else:
+                self.window[ik].update('imgs/empty_star.png')
 
     def menu_layout(self):
         return [
@@ -173,19 +181,20 @@ class WindowManager():
     def gallery_element(self, elemData):
         # print('Received gallery element elem data:')
         # print(elemData)
-        title = os.path.basename(elemData['img'])
+        image = os.path.basename(elemData['img'])
+        title = image
         imgSize = image_size(elemData['thumb'])
+        rating = self.folderData.get_rating(image)
+        if rating is None: 
+            rating = -1
         xPad = (self.imgDim - imgSize[0])//2
         yPad = (self.imgDim - imgSize[1])//2
         layout = [
             [   
                 sg.Image(
-                    'imgs/empty_star.png', 
+                    'imgs/full_star.png' if i <= rating else 'imgs/empty_star.png',
                     enable_events=True,
-                    key=ImageKey(
-                            image=elemData['img'], 
-                            element=f'star{ i }',
-                        ),
+                    key=ImageKey(image, element=f'star{ i }'),
                 )
                 for i in range(4)
             ],
@@ -194,10 +203,7 @@ class WindowManager():
                     elemData['thumb'],
                     pad=(xPad, yPad), 
                     enable_events=True,
-                    key=ImageKey(
-                            image=elemData['img'], 
-                            element='img',
-                        ),
+                    key=ImageKey(image, element='img'),
                 )
             ],
         ]
