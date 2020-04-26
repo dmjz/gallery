@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+from collections import namedtuple
 import PySimpleGUI as sg
 from utils import \
     to_grid, list_images, make_thumbnails, THUMBNAIL_SIZES, \
@@ -31,7 +32,6 @@ class FolderData():
             self.allFolderData = {}
 
     def open_folder(self, folderPath, settings):
-        # For now, just set up thumbnails
         self.openFolderPath = folderPath
         self.settings = settings
         self.openFolderData = self.get_folder_data(self.openFolderPath)
@@ -47,28 +47,44 @@ class FolderData():
         return self.new_folder_data(folderPath)
     
     def new_folder_data(self, folderPath):
-        folderData = {}
-        folderData['path'] = folderPath
-        folderData['uid'] = str(uuid.uuid4())
-        folderData['thumbnailFolder'] = os.path.join(
-            '.metadata', folderData['uid'], self.thumbsSubDir
-        )
-        folderData['shortName'] = os.path.basename(folderPath)
-        folderData['ratings'] = {
-            img: None for img in list_images(folderPath)
+        new_uid = str(uuid.uuid4())
+        folderData = {
+            'path': folderPath,
+            'uid':  new_uid,
+            'thumbnailFolder': os.path.join('.metadata', new_uid, self.thumbsSubDir),
+            'shortName': os.path.basename(folderPath),
+            'imageData': { 
+                    os.path.basename(img): self.new_image_data(img)
+                    for img in list_images(folderPath)
+                },
         }
+        # New folder, so make thumbnails
         try:
             os.makedirs(folderData['thumbnailFolder'], exist_ok=False)
         except FileExistsError:
             pass
         make_thumbnails(folderPath, folderData['thumbnailFolder'], makeDest=False)
-        self.allFolderData[folderPath] = folderData
-        self.save_folder_data()
+        self.update_save_folder_data(folderPath, folderData)
         return folderData
 
-    def save_folder_data(self):
+    def update_save_folder_data(self, fpath=None, fdata=None):
+        """ If fpath, fdata are None, update open folder entry """
+
+        if fpath and fdata:
+            self.allFolderData[fpath] = fdata
+        elif not fpath and not fdata:
+            self.allFolderData[self.openFolderPath] = self.openFolderData
+        else:
+            raise ValueError('Cannot specify one of fpath, fdata without the other')
         with open(self.allFolderDataPath, 'w', encoding='utf-8') as f:
             json.dump(self.allFolderData, f)
+
+    def new_image_data(self, img):
+        return {
+            'path': img,
+            'name': os.path.basename(img),
+            'rating': None,
+        }
 
     @property
     def folderShortName(self):
@@ -88,6 +104,14 @@ class FolderData():
     def images(self):
         return list_images(self.openFolderPath)
 
+    def set_rating(self, image, rating):
+        self.openFolderData['imageData'][image]['rating'] = rating
+        print('Updated image data after set_rating:')
+        print(self.openFolderData['imageData'][image])
+
+
+
+ImageKey = namedtuple('ImageKey', 'image, element')
 
 class WindowManager():
     """ Keep track of when we need to remake the window """
@@ -112,8 +136,9 @@ class WindowManager():
     def window_event_loop(self):
         while True:
             event, values = self.window.read()
-            print(event, values)
+            print('--- Event:\n', event, values)
             if event is None:
+                self.folderData.update_save_folder_data()
                 return event
             if event == self.selectFolderKey:
                 if not values[self.selectFolderKey]:
@@ -124,6 +149,16 @@ class WindowManager():
                     settings   = self.folderSettings,
                 )
                 return event
+            if isinstance(event, ImageKey):
+                clickedImage, clickedElement = event
+                print('Clicked image:', event.image)
+                print('Clicked element:', event.element)
+                if event.element[:4] == 'star':
+                    rating = int(event.element[-1])
+                    self.folderData.set_rating(event.image, rating)
+                    ###
+                    ### TODO: update the star images to reflect new rating
+                    ###
             #  We may have more interesting events in the future...
             if event == sg.TIMEOUT_KEY:
                 continue
@@ -139,20 +174,35 @@ class WindowManager():
         # print('Received gallery element elem data:')
         # print(elemData)
         title = os.path.basename(elemData['img'])
-        if len(title) > 50:
-            title = '...' + title[-47:]
         imgSize = image_size(elemData['thumb'])
         xPad = (self.imgDim - imgSize[0])//2
         yPad = (self.imgDim - imgSize[1])//2
         layout = [
             [   
-                sg.Image('imgs/empty_star.png'),
-                sg.Image('imgs/empty_star.png'),
-                sg.Image('imgs/empty_star.png'),
-                sg.Image('imgs/empty_star.png'),
+                sg.Image(
+                    'imgs/empty_star.png', 
+                    enable_events=True,
+                    key=ImageKey(
+                            image=elemData['img'], 
+                            element=f'star{ i }',
+                        ),
+                )
+                for i in range(4)
             ],
-            [sg.Image(elemData['thumb'], pad=(xPad, yPad))],
+            [
+                sg.Image(
+                    elemData['thumb'],
+                    pad=(xPad, yPad), 
+                    enable_events=True,
+                    key=ImageKey(
+                            image=elemData['img'], 
+                            element='img',
+                        ),
+                )
+            ],
         ]
+        if len(title) > 50:
+            title = '...' + title[-47:]
         return sg.Frame(
             title, layout, 
             element_justification = 'center'
