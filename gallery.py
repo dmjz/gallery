@@ -1,13 +1,18 @@
 import os
 import json
 import uuid
+import queue
 from collections import namedtuple
 import PySimpleGUI as sg
 from utils import \
     to_grid, list_images, make_thumbnails, THUMBNAIL_SIZES, \
-    image_size
+    image_size, thumbnails
 
 sg.theme('Dark Blue')
+
+
+ImageUpdateRecord = namedtuple('ImageUpdateRecord', 'image, folder')
+ImageKey = namedtuple('ImageKey', 'image, element')
 
 
 class FolderData():
@@ -31,18 +36,15 @@ class FolderData():
         except FileNotFoundError:
             self.allFolderData = {}
 
-    def open_folder(self, folderPath, settings):
+    def open_folder(self, folderPath, settings, windowManager):
         self.openFolderPath = folderPath
         self.settings = settings
         self.openFolderData = self.get_folder_data(self.openFolderPath)
+        self.make_folder_thumbs(windowManager)
         return True
 
     def get_folder_data(self, folderPath):
         if folderPath in self.allFolderData:
-            ###
-            ### TODO: "data completeness checks", e.g. are there thumbnails
-            ### of the right size (based on settings) for each image...
-            ###
             return self.allFolderData[folderPath]
         return self.new_folder_data(folderPath)
     
@@ -63,9 +65,38 @@ class FolderData():
             os.makedirs(folderData['thumbnailFolder'], exist_ok=False)
         except FileExistsError:
             pass
-        make_thumbnails(folderPath, folderData['thumbnailFolder'], makeDest=False)
+        ###
+        ### TODO: remove this once we're populating wm update queue
+        ###
+        # make_thumbnails(folderPath, folderData['thumbnailFolder'], makeDest=False)
         self.update_save_folder_data(folderPath, folderData)
         return folderData
+
+    def make_folder_thumbs(self, windowManager):
+        """ Make thumbs as necessary and populate wm image update queue """
+
+        src = self.openFolderPath
+        dest = self.openFolderData['thumbnailFolder']
+        ###
+        ### TODO: multi-threaded thumbnail creation
+        ###
+        destFiles = os.listdir(dest)
+        for img in list_images(src):
+            thumbPath = self.thumb_path(img)
+            if not thumbPath in destFiles:
+                print('Make thumb:', img)
+                thumbnails((os.path.join(src, img), dest))
+            else:
+                print('Thumb already made:', img)
+            record = ImageUpdateRecord(image=img, folder=self.openFolderPath)
+            windowManager.put_image_update(record)
+
+    def thumb_path(self, img):
+        return os.path.join(
+            self.openFolderData['thumbnailFolder'],
+            f"{ self.settings['thumbSize'] }_{ os.path.splitext(img)[0] }.png",
+        )
+        
 
     def update_save_folder_data(self, fpath=None, fdata=None):
         """ If fpath, fdata are None, update open folder entry """
@@ -111,9 +142,6 @@ class FolderData():
         return self.openFolderData['imageData'][image]['rating']
 
 
-
-ImageKey = namedtuple('ImageKey', 'image, element')
-
 class WindowManager():
     """ Keep track of when we need to remake the window """
 
@@ -125,6 +153,7 @@ class WindowManager():
     folderSettings = {
         'thumbSize': thumbSize,
     }
+    imageUpdateQueue = queue.Queue()
 
     def __init__(self):
         self.folder = None
@@ -133,6 +162,9 @@ class WindowManager():
     @property
     def folderShortName(self):
         return self.folderData.folderShortName if self.folder else ''
+
+    def put_image_update(self, img):
+        self.imageUpdateQueue.put(img)
 
     def window_event_loop(self):
         while True:
@@ -149,6 +181,7 @@ class WindowManager():
                 self.folder = self.folderData.open_folder(
                     folderPath = values[self.selectFolderKey],
                     settings   = self.folderSettings,
+                    windowManager = self,
                 )
                 return event
             if isinstance(event, ImageKey):
@@ -163,6 +196,18 @@ class WindowManager():
             if event == sg.TIMEOUT_KEY:
                 # Event: debug window
                 continue
+
+            # Poll image update queue
+            try:
+                record = self.imageUpdateQueue.get(block=False)
+            except queue.Empty:
+                pass
+            else:
+                print('Retrieved image update record:')
+                print(str(record))
+                ###
+                ### TODO: update image if folder is open, else ignore record
+                ###
 
     def update_star_display(self, image):
         # Note: imageKey = ImageKey obj obtained as event in event loop
@@ -223,7 +268,7 @@ class WindowManager():
                 'row': rowData['row'],
                 'col': col,
                 'img': data['name'],
-                'thumb': data['thumb'],
+                'thumb': 'imgs/loading_thumb.png', #data['thumb'],
             })
             for col, data in enumerate(rowData['imageDatas'])
             if data
