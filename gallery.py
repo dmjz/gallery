@@ -139,11 +139,12 @@ class WindowManager():
             event, values = self.window.read()
             print('--- Event:\n', event, values)
             if event is None:
+                # Event: close main window
                 self.folderData.update_save_folder_data()
                 return event
             if event == self.selectFolderKey:
+                # Event: close folder select window
                 if not values[self.selectFolderKey]:
-                    # User did not select a folder
                     continue
                 self.folder = self.folderData.open_folder(
                     folderPath = values[self.selectFolderKey],
@@ -151,6 +152,7 @@ class WindowManager():
                 )
                 return event
             if isinstance(event, ImageKey):
+                # Event: user clicked part of an image frame
                 if event.element[:4] == 'star':
                     rating = int(event.element[-1])
                     self.folderData.set_rating(event.image, rating)
@@ -159,6 +161,7 @@ class WindowManager():
                     # User clicked image itself
                     pass
             if event == sg.TIMEOUT_KEY:
+                # Event: debug window
                 continue
 
     def update_star_display(self, image):
