@@ -168,8 +168,11 @@ class WindowManager():
 
     def window_event_loop(self):
         while True:
-            event, values = self.window.read()
-            print('--- Event:\n', event, values)
+            event, values = self.window.read(timeout=100)
+            if event and event != '__TIMEOUT__':
+                print('-- Event:\n', event, values)
+
+            # Handle events
             if event is None:
                 # Event: close main window
                 self.folderData.update_save_folder_data()
@@ -193,9 +196,6 @@ class WindowManager():
                 if event.element == 'img':
                     # User clicked image itself
                     pass
-            if event == sg.TIMEOUT_KEY:
-                # Event: debug window
-                continue
 
             # Poll image update queue
             try:
@@ -205,9 +205,30 @@ class WindowManager():
             else:
                 print('Retrieved image update record:')
                 print(str(record))
-                ###
-                ### TODO: update image if folder is open, else ignore record
-                ###
+                self.update_image(record)
+
+            # Place at very end of event loop for debug window
+            if event == sg.TIMEOUT_KEY:
+                continue
+
+    def update_image(self, imageUpdateRecord):
+        image, folder = imageUpdateRecord
+        if folder != self.folderData.openFolderPath:
+            print('Folder no longer open:', folder)
+            return
+        key = ImageKey(image, 'img')
+        thumb = self.folderData.thumb_path(image)
+        elem = self.window[key]
+        if not elem:
+            print('Image not found:', image)
+            pass
+        else:
+            print('Updated:', thumb)
+            self.window[key].update(thumb)
+            ###
+            ### TODO: also update padding, or not...
+            ###
+            
 
     def update_star_display(self, image):
         # Note: imageKey = ImageKey obj obtained as event in event loop
