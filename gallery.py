@@ -2,7 +2,11 @@ import os
 import json
 import uuid
 import queue
+import time
 from collections import namedtuple
+import threading
+import concurrent.futures
+# mutex = threading.Lock()
 import PySimpleGUI as sg
 from utils import \
     to_grid, list_images, make_thumbnails, THUMBNAIL_SIZES, \
@@ -40,7 +44,8 @@ class FolderData():
         self.openFolderPath = folderPath
         self.settings = settings
         self.openFolderData = self.get_folder_data(self.openFolderPath)
-        self.make_folder_thumbs(windowManager)
+        ### Doing this in the WindowManager...
+        ### self.make_folder_thumbs(windowManager)
         return True
 
     def get_folder_data(self, folderPath):
@@ -60,15 +65,11 @@ class FolderData():
                     for img in list_images(folderPath)
                 },
         }
-        # New folder, so make thumbnails
+        # Make new thumbnail dir
         try:
             os.makedirs(folderData['thumbnailFolder'], exist_ok=False)
         except FileExistsError:
             pass
-        ###
-        ### TODO: remove this once we're populating wm update queue
-        ###
-        # make_thumbnails(folderPath, folderData['thumbnailFolder'], makeDest=False)
         self.update_save_folder_data(folderPath, folderData)
         return folderData
 
@@ -77,19 +78,23 @@ class FolderData():
 
         src = self.openFolderPath
         dest = self.openFolderData['thumbnailFolder']
-        ###
-        ### TODO: multi-threaded thumbnail creation
-        ###
         destFiles = os.listdir(dest)
-        for img in list_images(src):
+
+        def make_thumb_thread(img):
             thumbPath = self.thumb_path(img)
-            if not thumbPath in destFiles:
+            if thumbPath in destFiles:
+                print('Thumb already made:', img)
+            else:
                 print('Make thumb:', img)
                 thumbnails((os.path.join(src, img), dest))
-            else:
-                print('Thumb already made:', img)
             record = ImageUpdateRecord(image=img, folder=self.openFolderPath)
+            mutex.acquire()
             windowManager.put_image_update(record)
+            mutex.release()
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            executor.map(make_thumb_thread, list_images(src))
+
 
     def thumb_path(self, img):
         return os.path.join(
@@ -142,6 +147,27 @@ class FolderData():
         return self.openFolderData['imageData'][image]['rating']
 
 
+class ThreadedThumbApp(threading.Thread):
+    def __init__(self, windowManager, thumbData):
+        super().__init__()
+        self._stop_event = threading.Event()
+        self.wm = windowManager
+        self.thumbData = thumbData
+
+    def run(self):
+        folder = self.wm.folderData.openFolderPath
+        for img, src, dest in self.thumbData:
+            print('Make thumb:', img)
+            thumbnails((os.path.join(src, img), dest))
+            record = ImageUpdateRecord(image=img, folder=folder)
+            # mutex.acquire()
+            self.wm.put_image_update(record)
+            # mutex.release()        
+
+    def stop(self):
+        self._stop_event.set()
+
+
 class WindowManager():
     """ Keep track of when we need to remake the window """
 
@@ -186,6 +212,20 @@ class WindowManager():
                     settings   = self.folderSettings,
                     windowManager = self,
                 )
+
+                ### ???
+                ### Launch get_thumbnail threads here?
+                print('Kick off thumbnail threads')
+                src = self.folderData.openFolderPath
+                dest = self.folderData.openFolderData['thumbnailFolder']
+                thumbData = [
+                    (img, src, dest)
+                    for img in list_images(src)
+                ]
+                ThreadedThumbApp(self, thumbData).start()
+                ### ???
+                ### ???
+
                 return event
             if isinstance(event, ImageKey):
                 # Event: user clicked part of an image frame
@@ -210,6 +250,17 @@ class WindowManager():
             # Place at very end of event loop for debug window
             if event == sg.TIMEOUT_KEY:
                 continue
+
+    def make_thumb_thread(self, data):
+        print('thumb thread:', data)
+        src, dest = data
+        thumbPath = self.thumb_path(img)
+        print('Make thumb:', img)
+        thumbnails((os.path.join(src, img), dest))
+        record = ImageUpdateRecord(image=img, folder=self.openFolderPath)
+        # mutex.acquire()
+        self.put_image_update(record)
+        # mutex.release()
 
     def update_image(self, imageUpdateRecord):
         image, folder = imageUpdateRecord
@@ -323,7 +374,7 @@ class WindowManager():
             self.menu_layout(),
             [sg.Column(
                 self.gallery_layout(), 
-                size = (self.gridCols*self.imgDim + 100, 2*self.imgDim), 
+                size = (self.gridCols*(self.imgDim + 40), 2*self.imgDim), 
                 scrollable = True,
                 vertical_scroll_only = True,
             )],
