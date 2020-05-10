@@ -1,16 +1,17 @@
 import os
 import json
 import uuid
-import queue
 import time
+import queue
 from collections import namedtuple
 import threading
+mutex = threading.Lock()
 import concurrent.futures
-# mutex = threading.Lock()
+from multiprocessing import Pool, Queue
 import PySimpleGUI as sg
 from utils import \
     to_grid, list_images, make_thumbnails, THUMBNAIL_SIZES, \
-    image_size, thumbnails
+    image_size, thumbnails, thumbnails_alt
 
 sg.theme('Dark Blue')
 
@@ -73,6 +74,9 @@ class FolderData():
         self.update_save_folder_data(folderPath, folderData)
         return folderData
 
+    ###
+    ### TODO: either delete this or move thumb creation back here
+    ###
     def make_folder_thumbs(self, windowManager):
         """ Make thumbs as necessary and populate wm image update queue """
 
@@ -148,21 +152,41 @@ class FolderData():
 
 
 class ThreadedThumbApp(threading.Thread):
-    def __init__(self, windowManager, thumbData):
+    def __init__(self, windowManager, src, dest, images):
         super().__init__()
         self._stop_event = threading.Event()
         self.wm = windowManager
-        self.thumbData = thumbData
+        self.src = src
+        self.dest = dest
+        self.images = images
+
+    def thumb_callback(self, img):
+        record = ImageUpdateRecord(
+            image=img, folder=self.wm.folderData.openFolderPath
+        )
+        mutex.acquire()
+        self.wm.put_image_update(record)
+        mutex.release()
 
     def run(self):
-        folder = self.wm.folderData.openFolderPath
-        for img, src, dest in self.thumbData:
-            print('Make thumb:', img)
-            thumbnails((os.path.join(src, img), dest))
-            record = ImageUpdateRecord(image=img, folder=folder)
-            # mutex.acquire()
+        # Multiprocessing version. thumbnails_alt takes image name as arg,
+        # returns image name when done. But this was actually sig slower
+        # in testing. Preserved here in case I want to come back to it
+        # ---
+        # pool = Pool(4)
+        # for img in self.images:
+        #     pool.apply_async(
+        #         thumbnails_alt, 
+        #         args=[(self.src, img, self.dest)], 
+        #         callback=self.thumb_callback
+        #     )
+        # ---
+        for img in self.images:
+            thumbnails((os.path.join(self.src, img), self.dest))
+            record = ImageUpdateRecord(
+                image=img, folder=self.wm.folderData.openFolderPath
+            )
             self.wm.put_image_update(record)
-            # mutex.release()        
 
     def stop(self):
         self._stop_event.set()
@@ -179,7 +203,7 @@ class WindowManager():
     folderSettings = {
         'thumbSize': thumbSize,
     }
-    imageUpdateQueue = queue.Queue()
+    imageUpdateQueue = Queue()
 
     def __init__(self):
         self.folder = None
@@ -218,11 +242,7 @@ class WindowManager():
                 print('Kick off thumbnail threads')
                 src = self.folderData.openFolderPath
                 dest = self.folderData.openFolderData['thumbnailFolder']
-                thumbData = [
-                    (img, src, dest)
-                    for img in list_images(src)
-                ]
-                ThreadedThumbApp(self, thumbData).start()
+                ThreadedThumbApp(self, src, dest, list_images(src)).start()
                 ### ???
                 ### ???
 
