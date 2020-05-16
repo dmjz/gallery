@@ -231,8 +231,9 @@ class WindowManager():
                     pass
             if event == 'Sort':
                 # Event: clicked sort button
-                print('Sort by star rating')
-
+                if self.folderData:
+                    print('Sort by star rating')
+                    print(self.folderData.image_ratings())
 
             # Poll image update queue
             try:
