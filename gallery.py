@@ -94,7 +94,7 @@ class FolderData():
         return {
             'path': img,
             'name': os.path.basename(img),
-            'rating': None,
+            'rating': -1,
         }
 
     @property
@@ -128,6 +128,20 @@ class FolderData():
             img: self.openFolderData['imageData'][img]['rating']
             for img in list_images(self.openFolderPath)
         }
+
+    def sorted_thumbs_names(self, sortByRating):
+        """ Return (thumbs, names) optional sorted by rating """
+
+        if sortByRating:
+            thumbs = self.thumbnail_paths()
+            imgRatingDict = self.image_ratings()
+            sortedTriples = sorted(
+                list(zip(thumbs, imgRatingDict.keys(), imgRatingDict.values())),
+                key = lambda x: -x[-1]
+            )
+            return list(zip(*sortedTriples))[:2] # magic unpacking
+        else:
+            return (self.thumbnail_paths(), self.images())
 
 
 class ThreadedThumbApp(threading.Thread):
@@ -187,6 +201,7 @@ class WindowManager():
     def __init__(self):
         self.folder = None
         self.window = None
+        self.sortByRating = False
 
     @property
     def folderShortName(self):
@@ -197,7 +212,7 @@ class WindowManager():
 
     def window_event_loop(self):
         while True:
-            event, values = self.window.read(timeout=100)
+            event, values = self.window.read(timeout=20)
             if event and event != '__TIMEOUT__':
                 print('-- Event:\n', event, values)
 
@@ -215,10 +230,8 @@ class WindowManager():
                     settings   = self.folderSettings,
                     windowManager = self,
                 )
-                print('Kick off thumbnail threads')
-                src = self.folderData.openFolderPath
-                dest = self.folderData.openFolderData['thumbnailFolder']
-                ThreadedThumbApp(self, src, dest, list_images(src)).start()
+                self.sortByRating = False
+                self.kickoff_thumb_threads()
                 return event
             if isinstance(event, ImageKey):
                 # Event: user clicked part of an image frame
@@ -231,9 +244,10 @@ class WindowManager():
                     pass
             if event == 'Sort':
                 # Event: clicked sort button
-                if self.folderData:
-                    print('Sort by star rating')
-                    print(self.folderData.image_ratings())
+                if self.folder:
+                    self.sortByRating = True
+                    self.kickoff_thumb_threads()
+                    return event
 
             # Poll image update queue
             try:
@@ -249,16 +263,11 @@ class WindowManager():
             if event == sg.TIMEOUT_KEY:
                 continue
 
-    def make_thumb_thread(self, data):
-        print('thumb thread:', data)
-        src, dest = data
-        thumbPath = self.thumb_path(img)
-        print('Make thumb:', img)
-        thumbnails((os.path.join(src, img), dest))
-        record = ImageUpdateRecord(image=img, folder=self.openFolderPath)
-        # mutex.acquire()
-        self.put_image_update(record)
-        # mutex.release()
+    def kickoff_thumb_threads(self):
+        print('Kick off thumbnail threads')
+        src = self.folderData.openFolderPath
+        dest = self.folderData.openFolderData['thumbnailFolder']
+        ThreadedThumbApp(self, src, dest, list_images(src)).start()
 
     def update_image(self, imageUpdateRecord):
         image, folder = imageUpdateRecord
@@ -277,7 +286,6 @@ class WindowManager():
             ###
             ### TODO: also update padding, or not...
             ###
-            
 
     def update_star_display(self, image):
         # Note: imageKey = ImageKey obj obtained as event in event loop
@@ -353,8 +361,7 @@ class WindowManager():
 
     def gallery_layout(self):
         if self.folder:
-            thumbs = self.folderData.thumbnail_paths()
-            names = self.folderData.images()
+            thumbs, names = self.folderData.sorted_thumbs_names(self.sortByRating)
             imgDataGrid = self.image_data_grid(thumbs=thumbs, imgNames=names)
             rowDataDicts = [
                 {'row': row, 'imageDatas': imageDatas}
