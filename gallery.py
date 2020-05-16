@@ -11,7 +11,7 @@ from multiprocessing import Pool, Queue
 import PySimpleGUI as sg
 from utils import \
     to_grid, list_images, make_thumbnails, THUMBNAIL_SIZES, \
-    image_size, thumbnails, thumbnails_alt
+    image_size, thumbnails
 
 sg.theme('Dark Blue')
 
@@ -45,8 +45,6 @@ class FolderData():
         self.openFolderPath = folderPath
         self.settings = settings
         self.openFolderData = self.get_folder_data(self.openFolderPath)
-        ### Doing this in the WindowManager...
-        ### self.make_folder_thumbs(windowManager)
         return True
 
     def get_folder_data(self, folderPath):
@@ -74,38 +72,11 @@ class FolderData():
         self.update_save_folder_data(folderPath, folderData)
         return folderData
 
-    ###
-    ### TODO: either delete this or move thumb creation back here
-    ###
-    def make_folder_thumbs(self, windowManager):
-        """ Make thumbs as necessary and populate wm image update queue """
-
-        src = self.openFolderPath
-        dest = self.openFolderData['thumbnailFolder']
-        destFiles = os.listdir(dest)
-
-        def make_thumb_thread(img):
-            thumbPath = self.thumb_path(img)
-            if thumbPath in destFiles:
-                print('Thumb already made:', img)
-            else:
-                print('Make thumb:', img)
-                thumbnails((os.path.join(src, img), dest))
-            record = ImageUpdateRecord(image=img, folder=self.openFolderPath)
-            mutex.acquire()
-            windowManager.put_image_update(record)
-            mutex.release()
-
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            executor.map(make_thumb_thread, list_images(src))
-
-
     def thumb_path(self, img):
         return os.path.join(
             self.openFolderData['thumbnailFolder'],
             f"{ self.settings['thumbSize'] }_{ os.path.splitext(img)[0] }.png",
         )
-        
 
     def update_save_folder_data(self, fpath=None, fdata=None):
         """ If fpath, fdata are None, update open folder entry """
@@ -150,6 +121,14 @@ class FolderData():
     def get_rating(self, image):
         return self.openFolderData['imageData'][image]['rating']
 
+    def image_ratings(self):
+        """ Return dict {img: rating} """
+
+        return {
+            img: self.openFolderData['imageData'][img]['rating']
+            for img in list_images(self.openFolderPath)
+        }
+
 
 class ThreadedThumbApp(threading.Thread):
     def __init__(self, windowManager, src, dest, images):
@@ -170,8 +149,8 @@ class ThreadedThumbApp(threading.Thread):
 
     def run(self):
         # Multiprocessing version. thumbnails_alt takes image name as arg,
-        # returns image name when done. But this was actually sig slower
-        # in testing. Preserved here in case I want to come back to it
+        # returns image name when done. But was slower in testing.
+        # Preserved here in case I want to come back to it
         # ---
         # pool = Pool(4)
         # for img in self.images:
@@ -236,16 +215,10 @@ class WindowManager():
                     settings   = self.folderSettings,
                     windowManager = self,
                 )
-
-                ### ???
-                ### Launch get_thumbnail threads here?
                 print('Kick off thumbnail threads')
                 src = self.folderData.openFolderPath
                 dest = self.folderData.openFolderData['thumbnailFolder']
                 ThreadedThumbApp(self, src, dest, list_images(src)).start()
-                ### ???
-                ### ???
-
                 return event
             if isinstance(event, ImageKey):
                 # Event: user clicked part of an image frame
@@ -256,6 +229,10 @@ class WindowManager():
                 if event.element == 'img':
                     # User clicked image itself
                     pass
+            if event == 'Sort':
+                # Event: clicked sort button
+                print('Sort by star rating')
+
 
             # Poll image update queue
             try:
@@ -313,6 +290,7 @@ class WindowManager():
 
     def menu_layout(self):
         return [
+            sg.Button('Sort', enable_events=True),
             sg.InputText(key=self.selectFolderKey, enable_events=True, visible=False), 
             sg.FolderBrowse('Open gallery', target=self.selectFolderKey),
             sg.Text(f'Folder: { self.folderShortName }', size=(60,1)),
