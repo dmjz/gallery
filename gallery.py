@@ -9,6 +9,7 @@ mutex = threading.Lock()
 import concurrent.futures
 from multiprocessing import Pool, Queue
 import PySimpleGUI as sg
+from PIL import Image
 from utils import \
     to_grid, list_images, make_thumbnails, THUMBNAIL_SIZES, \
     image_size, thumbnails
@@ -154,6 +155,9 @@ class ThreadedThumbApp(threading.Thread):
         self.images = images
 
     def thumb_callback(self, img):
+        #
+        # Preserved here in case I want to try multiprocessing again
+        #
         record = ImageUpdateRecord(
             image=img, folder=self.wm.folderData.openFolderPath
         )
@@ -175,7 +179,12 @@ class ThreadedThumbApp(threading.Thread):
         #     )
         # ---
         for img in self.images:
-            thumbnails((os.path.join(self.src, img), self.dest))
+            try: 
+                Image.open(self.wm.folderData.thumb_path(img))
+                print('Thumb exists', img)
+            except:
+                thumbnails((os.path.join(self.src, img), self.dest))
+                print('Create thumb:', img)
             record = ImageUpdateRecord(
                 image=img, folder=self.wm.folderData.openFolderPath
             )
@@ -212,7 +221,7 @@ class WindowManager():
 
     def window_event_loop(self):
         while True:
-            event, values = self.window.read(timeout=20)
+            event, values = self.window.read(timeout=100)
             if event and event != '__TIMEOUT__':
                 print('-- Event:\n', event, values)
 
@@ -249,19 +258,25 @@ class WindowManager():
                     self.kickoff_thumb_threads()
                     return event
 
-            # Poll image update queue
-            try:
-                record = self.imageUpdateQueue.get(block=False)
-            except queue.Empty:
-                pass
-            else:
-                print('Retrieved image update record:')
-                print(str(record))
+            # Poll queue and update images
+            records = self.batch_poll_img_queue(batchSize=8)
+            for record in records:
                 self.update_image(record)
 
             # Place at very end of event loop for debug window
             if event == sg.TIMEOUT_KEY:
                 continue
+
+    def batch_poll_img_queue(self, batchSize=4):
+        """ Return batch of image update records from queue """
+
+        records = []
+        for i in range(batchSize):
+            try:
+                records.append(self.imageUpdateQueue.get(block=False))
+            except queue.Empty:
+                break
+        return records
 
     def kickoff_thumb_threads(self):
         print('Kick off thumbnail threads')
