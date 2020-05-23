@@ -49,6 +49,20 @@ def thumbnails(imgDestPair):
         im.copy()
         im.save(os.path.join(dest, f'{ prefix }_{ name }'))
 
+def backup_and_resize(image, dest, backupFolder, percent):
+    """ Overwrite image with copy resized by given percent out of 100
+        (eg 100px, percent = 90 -> 90px)
+        and save backup copy
+    """
+
+    im = Image.open(image)
+    name = os.path.basename(image)
+    im.save(os.path.join(backupFolder, name))
+    k = percent/100.0
+    newSize = (round(k*im.size[0]), round(k*im.size[1]))
+    im.resize(newSize).save(os.path.join(dest, name))
+
+
 def make_thumbnails(src, dest, makeDest=True):
     """ Make thumbnails from src images in the dest folder 
         Return number of images processed

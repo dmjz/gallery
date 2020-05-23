@@ -12,7 +12,7 @@ import PySimpleGUI as sg
 from PIL import Image
 from utils import \
     to_grid, list_images, make_thumbnails, THUMBNAIL_SIZES, \
-    image_size, thumbnails
+    image_size, thumbnails, backup_and_resize
 
 sg.theme('Dark Blue')
 
@@ -25,6 +25,7 @@ class FolderData():
     """ Load, edit, save folder metadata """
 
     thumbsSubDir = '.t'
+    backupsSubDir = '.b'
     allFolderDataPath = os.path.join('.metadata', 'all_folder_data.json')
     allFolderData = None
 
@@ -59,17 +60,22 @@ class FolderData():
             'path': folderPath,
             'uid':  new_uid,
             'thumbnailFolder': os.path.join('.metadata', new_uid, self.thumbsSubDir),
+            'backupsFolder': os.path.join('.metadata', new_uid, self.backupsSubDir),
             'shortName': os.path.basename(folderPath),
             'imageData': { 
                     os.path.basename(img): self.new_image_data(img)
                     for img in list_images(folderPath)
                 },
         }
-        # Make new thumbnail dir
-        try:
-            os.makedirs(folderData['thumbnailFolder'], exist_ok=False)
-        except FileExistsError:
-            pass
+        # Make new dirs
+        for newMetadataSubdir in (
+                folderData['thumbnailFolder'], 
+                folderData['backupsFolder'],
+            ):
+            try: 
+                os.makedirs(newMetadataSubdir, exist_ok=False)
+            except FileExistsError: 
+                pass
         self.update_save_folder_data(folderPath, folderData)
         return folderData
 
@@ -78,6 +84,9 @@ class FolderData():
             self.openFolderData['thumbnailFolder'],
             f"{ self.settings['thumbSize'] }_{ os.path.splitext(img)[0] }.png",
         )
+
+    def backup_path(self, img):
+        return os.path.join(self.openFolderData['backupsFolder'], img)
 
     def update_save_folder_data(self, fpath=None, fdata=None):
         """ If fpath, fdata are None, update open folder entry """
@@ -146,6 +155,8 @@ class FolderData():
 
 
 class ThreadedThumbApp(threading.Thread):
+    """ Retreive thumbnails in a thread parallel to main window thread """
+
     def __init__(self, windowManager, src, dest, images):
         super().__init__()
         self._stop_event = threading.Event()
@@ -194,10 +205,51 @@ class ThreadedThumbApp(threading.Thread):
         self._stop_event.set()
 
 
+class ThreadedResizeApp(threading.Thread):
+    """ Resize images in a thread parallel to main window thread 
+        (Also, remake thumbnails for resized images)
+    """
+
+    def __init__(self, windowManager, folder, images, size, backupFolder, thumbFolder):
+        super().__init__()
+        self._stop_event = threading.Event()
+        self.wm = windowManager
+        self.folder = folder
+        self.images = images
+        self.size = size
+        self.backupFolder = backupFolder
+        self.thumbFolder = thumbFolder
+
+    def run(self):
+        for img in self.images:
+            imagePath = os.path.join(self.folder, img)
+
+            print('Backup and resize:')
+            print('    ', imagePath)
+            print('    ', self.folder)
+            print('    ', self.backupFolder)
+            print('    ', self.size)
+            backup_and_resize(imagePath, self.folder, self.backupFolder, self.size)
+
+            print('Create thumb:')
+            print('    ', imagePath)
+            print('    ', self.thumbFolder)
+            thumbnails((imagePath, self.thumbFolder))
+            
+            record = ImageUpdateRecord(
+                image=img, folder=self.wm.folderData.openFolderPath
+            )
+            self.wm.put_image_update(record)
+
+    def stop(self):
+        self._stop_event.set()
+
+
 class WindowManager():
     """ Keep track of when we need to remake the window """
 
     selectFolderKey = 'select_folder'
+    resizeInputKey = 'resize_input'
     thumbSize = 'S'
     imgDim = THUMBNAIL_SIZES[thumbSize]
     gridCols = 4
@@ -249,7 +301,7 @@ class WindowManager():
                     self.folderData.set_rating(event.image, rating)
                     self.update_star_display(event.image)
                 if event.element == 'img':
-                    # User clicked image itself
+                    self.toggle_check(event.image)
                     pass
             if event == 'Sort':
                 # Event: clicked sort button
@@ -257,6 +309,10 @@ class WindowManager():
                     self.sortByRating = True
                     self.kickoff_thumb_threads()
                     return event
+            if event == 'Resize:':
+                # Event: clicked resize button
+                if self.folder:
+                    self.kickoff_resize_threads()
 
             # Poll queue and update images
             records = self.batch_poll_img_queue(batchSize=8)
@@ -284,6 +340,29 @@ class WindowManager():
         dest = self.folderData.openFolderData['thumbnailFolder']
         ThreadedThumbApp(self, src, dest, list_images(src)).start()
 
+    def kickoff_resize_threads(self):
+        print('Kick off resize threads')
+        src = self.folderData.openFolderPath
+        selected = [
+            img for img in self.folderData.images()
+            if self.window[ImageKey(img, 'check')].get()
+        ]
+        newSize = self.window[self.resizeInputKey].get()
+        try:
+            newSize = float(newSize)
+            assert newSize > 0
+        except:
+            ###
+            ### TODO: let user know resize text is invalid
+            ###
+            print('Invalid resize text, no action taken')
+        else:
+            ThreadedResizeApp(
+                windowManager=self, folder=src, images=selected, size=newSize,  
+                backupFolder=self.folderData.openFolderData['backupsFolder'], 
+                thumbFolder=self.folderData.openFolderData['thumbnailFolder'], 
+            ).start()
+
     def update_image(self, imageUpdateRecord):
         image, folder = imageUpdateRecord
         if folder != self.folderData.openFolderPath:
@@ -298,12 +377,8 @@ class WindowManager():
         else:
             print('Updated:', thumb)
             self.window[key].update(thumb)
-            ###
-            ### TODO: also update padding, or not...
-            ###
 
     def update_star_display(self, image):
-        # Note: imageKey = ImageKey obj obtained as event in event loop
         rating = self.folderData.get_rating(image)
         for i in range(4):
             ik = ImageKey(image, f'star{ i }')
@@ -312,8 +387,15 @@ class WindowManager():
             else:
                 self.window[ik].update('imgs/empty_star.png')
 
+    def toggle_check(self, image):
+        ik = ImageKey(image, 'check')
+        self.window[ik].update(not self.window[ik].get())
+
     def menu_layout(self):
         return [
+            sg.Button('Resize:', enable_events=True),
+            sg.InputText('90', key=self.resizeInputKey, size=(6,1), enable_events=False),
+            sg.Text('%', size=(2,1), enable_events=False),
             sg.Button('Sort', enable_events=True),
             sg.InputText(key=self.selectFolderKey, enable_events=True, visible=False), 
             sg.FolderBrowse('Open gallery', target=self.selectFolderKey),
@@ -331,15 +413,19 @@ class WindowManager():
             rating = -1
         xPad = (self.imgDim - imgSize[0])//2
         yPad = (self.imgDim - imgSize[1])//2
+        check = [
+            sg.Check('', enable_events=True, key=ImageKey(image, element='check'))
+        ]
+        ratingStars = [   
+            sg.Image(
+                'imgs/full_star.png' if i <= rating else 'imgs/empty_star.png',
+                enable_events=True,
+                key=ImageKey(image, element=f'star{ i }'),
+            )
+            for i in range(4)
+        ]
         layout = [
-            [   
-                sg.Image(
-                    'imgs/full_star.png' if i <= rating else 'imgs/empty_star.png',
-                    enable_events=True,
-                    key=ImageKey(image, element=f'star{ i }'),
-                )
-                for i in range(4)
-            ],
+            check + ratingStars,
             [
                 sg.Image(
                     elemData['thumb'],
