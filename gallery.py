@@ -12,7 +12,7 @@ import PySimpleGUI as sg
 from PIL import Image
 from utils import \
     to_grid, list_images, make_thumbnails, THUMBNAIL_SIZES, \
-    image_size, thumbnails, backup_and_resize
+    image_size, thumbnails, backup_and_resize, open_image
 
 sg.theme('Dark Blue')
 
@@ -272,7 +272,8 @@ class WindowManager():
                     self.update_star_display(event.image)
                 if event.element == 'img':
                     self.toggle_check(event.image)
-                    pass
+                if event.element == 'open':
+                    self.open_image(event.image)
             if event == self.sortRatingButtonKey:
                 if self.folder:
                     self.sortByRating = True
@@ -362,6 +363,13 @@ class WindowManager():
         ik = ImageKey(image, 'check')
         self.window[ik].update(not self.window[ik].get())
 
+    def open_image(self, image):
+        try:
+            open_image(os.path.join(self.folderData.openFolderPath, image))
+        except KeyError:
+            sg.Popup('Cannot open images on this OS', title='Unsupported OS')
+            print('Invalid platform, no action taken')
+
     def menu_layout(self):
         resizeFrame = sg.Frame(
             'Resize',
@@ -412,8 +420,15 @@ class WindowManager():
             )
             for i in range(4)
         ]
+        openIcon = [
+            sg.Image(
+                'imgs/open_icon.png',
+                enable_events=True,
+                key=ImageKey(image, element=f'open'),
+            )
+        ]
         layout = [
-            check + ratingStars,
+            check + ratingStars + openIcon,
             [
                 sg.Image(
                     elemData['thumb'],

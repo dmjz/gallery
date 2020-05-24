@@ -1,6 +1,8 @@
 import os
 import glob
 import math
+import subprocess
+import sys
 from PIL import Image
 from multiprocessing import Pool
 
@@ -31,11 +33,19 @@ def list_images(folder):
         for f in glob.glob(os.path.join(folder, g))
     ]
 
-def open_image(folder, image):
-    """ Display the image """
+def open_image(imagePath):
+    """ Display image in default viewer;
+        Raise KeyError if user platform unsupported
+    """
 
-    im = Image.open(os.path.join(folder, image))
-    im.show()
+    if sys.platform == 'win32':
+        os.startfile(imagePath)
+    else:
+        viewer = {
+            'darwin': 'open',
+            'linux': 'xdg-open',
+        }[sys.platform]
+        subprocess.run([viewer, imagePath])
 
 def thumbnails(imgDestPair):
     """ Save PNG thumbnails in decreasing sizes """
