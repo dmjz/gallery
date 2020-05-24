@@ -165,34 +165,11 @@ class ThreadedThumbApp(threading.Thread):
         self.dest = dest
         self.images = images
 
-    def thumb_callback(self, img):
-        #
-        # Preserved here in case I want to try multiprocessing again
-        #
-        record = ImageUpdateRecord(
-            image=img, folder=self.wm.folderData.openFolderPath
-        )
-        mutex.acquire()
-        self.wm.put_image_update(record)
-        mutex.release()
-
     def run(self):
-        # Multiprocessing version. thumbnails_alt takes image name as arg,
-        # returns image name when done. But was slower in testing.
-        # Preserved here in case I want to come back to it
-        # ---
-        # pool = Pool(4)
-        # for img in self.images:
-        #     pool.apply_async(
-        #         thumbnails_alt, 
-        #         args=[(self.src, img, self.dest)], 
-        #         callback=self.thumb_callback
-        #     )
-        # ---
         for img in self.images:
             try: 
                 Image.open(self.wm.folderData.thumb_path(img))
-                print('Thumb exists', img)
+                print('Thumb exists:', img)
             except:
                 thumbnails((os.path.join(self.src, img), self.dest))
                 print('Create thumb:', img)
@@ -222,20 +199,10 @@ class ThreadedResizeApp(threading.Thread):
 
     def run(self):
         for img in self.images:
+            print('Resize:', img)
             imagePath = os.path.join(self.folder, img)
-
-            print('Backup and resize:')
-            print('    ', imagePath)
-            print('    ', self.folder)
-            print('    ', self.backupFolder)
-            print('    ', self.size)
             backup_and_resize(imagePath, self.folder, self.backupFolder, self.size)
-
-            print('Create thumb:')
-            print('    ', imagePath)
-            print('    ', self.thumbFolder)
             thumbnails((imagePath, self.thumbFolder))
-            
             record = ImageUpdateRecord(
                 image=img, folder=self.wm.folderData.openFolderPath
             )
@@ -335,13 +302,13 @@ class WindowManager():
         return records
 
     def kickoff_thumb_threads(self):
-        print('Kick off thumbnail threads')
+        print('Kick off thumbnail thread')
         src = self.folderData.openFolderPath
         dest = self.folderData.openFolderData['thumbnailFolder']
         ThreadedThumbApp(self, src, dest, list_images(src)).start()
 
     def kickoff_resize_threads(self):
-        print('Kick off resize threads')
+        print('Kick off resize thread')
         src = self.folderData.openFolderPath
         selected = [
             img for img in self.folderData.images()
@@ -352,9 +319,7 @@ class WindowManager():
             newSize = float(newSize)
             assert newSize > 0
         except:
-            ###
-            ### TODO: let user know resize text is invalid
-            ###
+            sg.Popup('Please enter a valid percent to resize', title='Cannot resize')
             print('Invalid resize text, no action taken')
         else:
             ThreadedResizeApp(
@@ -394,7 +359,7 @@ class WindowManager():
     def menu_layout(self):
         return [
             sg.Button('Resize:', enable_events=True),
-            sg.InputText('90', key=self.resizeInputKey, size=(6,1), enable_events=False),
+            sg.InputText('100', key=self.resizeInputKey, size=(6,1), enable_events=False),
             sg.Text('%', size=(2,1), enable_events=False),
             sg.Button('Sort', enable_events=True),
             sg.InputText(key=self.selectFolderKey, enable_events=True, visible=False), 
