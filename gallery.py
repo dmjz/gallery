@@ -217,6 +217,9 @@ class WindowManager():
 
     selectFolderKey = 'select_folder'
     resizeInputKey = 'resize_input'
+    resizeButtonKey = 'resize_button'
+    sortRatingButtonKey = 'sort_rating_button'
+    sortNameButtonKey = 'sort_name_button'
     thumbSize = 'S'
     imgDim = THUMBNAIL_SIZES[thumbSize]
     gridCols = 4
@@ -270,14 +273,17 @@ class WindowManager():
                 if event.element == 'img':
                     self.toggle_check(event.image)
                     pass
-            if event == 'Sort':
-                # Event: clicked sort button
+            if event == self.sortRatingButtonKey:
                 if self.folder:
                     self.sortByRating = True
                     self.kickoff_thumb_threads()
                     return event
-            if event == 'Resize:':
-                # Event: clicked resize button
+            if event == self.sortNameButtonKey:
+                if self.folder:
+                    self.sortByRating = False
+                    self.kickoff_thumb_threads()
+                    return event
+            if event == self.resizeButtonKey:
                 if self.folder:
                     self.kickoff_resize_threads()
 
@@ -357,14 +363,31 @@ class WindowManager():
         self.window[ik].update(not self.window[ik].get())
 
     def menu_layout(self):
+        resizeFrame = sg.Frame(
+            'Resize',
+            [[
+                sg.Button('Resize:', key=self.resizeButtonKey, enable_events=True),
+                sg.InputText('100', key=self.resizeInputKey, size=(6,1), enable_events=False),
+                sg.Text('%', size=(2,1), enable_events=False),
+            ]]
+        )
+        sortFrame = sg.Frame(
+            'Sort',
+            [[
+                sg.Button('By Rating', key=self.sortRatingButtonKey, enable_events=True),
+                sg.Button('By Name', key=self.sortNameButtonKey, enable_events=True),
+            ]]
+        )
+        openGalleryFrame = sg.Frame(
+            'Open gallery',
+            [[
+                sg.FolderBrowse('Open gallery', target=self.selectFolderKey),
+                sg.Text(f'Folder: { self.folderShortName }', size=(60,1)),
+            ]]
+        )
         return [
-            sg.Button('Resize:', enable_events=True),
-            sg.InputText('100', key=self.resizeInputKey, size=(6,1), enable_events=False),
-            sg.Text('%', size=(2,1), enable_events=False),
-            sg.Button('Sort', enable_events=True),
-            sg.InputText(key=self.selectFolderKey, enable_events=True, visible=False), 
-            sg.FolderBrowse('Open gallery', target=self.selectFolderKey),
-            sg.Text(f'Folder: { self.folderShortName }', size=(60,1)),
+            resizeFrame, sortFrame, openGalleryFrame, 
+            sg.InputText(key=self.selectFolderKey, enable_events=True, visible=False),
         ]
 
     def gallery_element(self, elemData):
