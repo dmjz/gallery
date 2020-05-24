@@ -15,6 +15,7 @@ from utils import \
     image_size, thumbnails, backup_and_resize, open_image
 
 sg.theme('Dark Blue')
+sg.SetOptions(window_location=(-6,0))
 
 
 ImageUpdateRecord = namedtuple('ImageUpdateRecord', 'image, folder')
@@ -222,6 +223,7 @@ class WindowManager():
     sortNameButtonKey = 'sort_name_button'
     thumbSize = 'S'
     imgDim = THUMBNAIL_SIZES[thumbSize]
+    gridRows = 2
     gridCols = 4
     folderData = FolderData()
     folderSettings = {
@@ -229,9 +231,11 @@ class WindowManager():
     }
     imageUpdateQueue = Queue()
 
-    def __init__(self):
+    def __init__(self, cols=None):
         self.folder = None
         self.window = None
+        if cols:
+            self.gridCols = cols
         self.sortByRating = False
 
     @property
@@ -403,19 +407,24 @@ class WindowManager():
         # print(elemData)
         image = os.path.basename(elemData['img'])
         title = image
-        imgSize = image_size(elemData['thumb'])
+        # imgSize = image_size(elemData['thumb'])
         rating = self.folderData.get_rating(image)
         if rating is None: 
             rating = -1
-        xPad = (self.imgDim - imgSize[0])//2
-        yPad = (self.imgDim - imgSize[1])//2
+        # xPad = (self.imgDim - imgSize[0])//2
+        # yPad = (self.imgDim - imgSize[1])//2
         check = [
-            sg.Check('', enable_events=True, key=ImageKey(image, element='check'))
+            sg.Check('', 
+                enable_events=True, 
+                pad=(30,0),
+                key=ImageKey(image, element='check'),
+            )
         ]
         ratingStars = [   
             sg.Image(
                 'imgs/full_star.png' if i <= rating else 'imgs/empty_star.png',
                 enable_events=True,
+                pad=(2,0),
                 key=ImageKey(image, element=f'star{ i }'),
             )
             for i in range(4)
@@ -424,6 +433,7 @@ class WindowManager():
             sg.Image(
                 'imgs/open_icon.png',
                 enable_events=True,
+                pad=(30,0),
                 key=ImageKey(image, element=f'open'),
             )
         ]
@@ -432,7 +442,7 @@ class WindowManager():
             [
                 sg.Image(
                     elemData['thumb'],
-                    pad=(xPad, yPad), 
+                    # pad=(xPad, yPad), 
                     enable_events=True,
                     key=ImageKey(image, element='img'),
                 )
@@ -476,19 +486,22 @@ class WindowManager():
                 for row, rowData in enumerate(rowDataDicts)
             ]
         else:
-            displayText = 'Gallery will go here...'
-            return [[ sg.Text(displayText, size=(100,40)) ]]
+            return [[ sg.Text('', size=(100,40)) ]]
 
     def layout(self):
         return [
             self.menu_layout(),
             [sg.Column(
                 self.gallery_layout(), 
-                size = (self.gridCols*(self.imgDim + 40), 2*self.imgDim), 
+                size = (
+                    self.gridCols*(self.imgDim + 30),
+                    sg.Window.get_screen_size()[1]-100
+                ), 
+                pad = (0,0),
                 scrollable = True,
                 vertical_scroll_only = True,
             )],
-            [sg.Debug()],
+            # [sg.Debug()],
         ]
 
     def remake_window(self):

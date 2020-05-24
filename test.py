@@ -4,6 +4,7 @@ if __name__ == '__main__':
     import shutil
     import local_secrets
     import random
+    import PySimpleGUI as sg
     from timeit import default_timer as timer
     from gallery import *
 
@@ -31,10 +32,17 @@ if __name__ == '__main__':
             print(f'Thumbnail test runtime for { srcLeaf }:')
             print(f'{ end-start } seconds, { (end-start)/numImages } sec/file')
 
-    def test_WindowManager():
-        """ Test WindowManager class """
+    def test_main():
+        """ Test main program """
 
-        wm = WindowManager()
+        print(sg.Window.get_screen_size())
+        w, h = sg.Window.get_screen_size()
+        cols = 1
+        while (THUMBNAIL_SIZES['S'] + 30)*cols + 21 <= w:
+            cols += 1
+        cols = max(1, cols-1)
+        print(f'Cols = { cols }')
+        wm = WindowManager(cols=cols)
         wm.run_window()
 
     def test_layout_components():
@@ -51,5 +59,5 @@ if __name__ == '__main__':
 
 
     # test_thumbnails()
-    test_WindowManager()
+    test_main()
     # d =  test_layout_components()

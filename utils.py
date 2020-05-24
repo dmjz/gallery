@@ -8,8 +8,9 @@ from multiprocessing import Pool
 
 
 IMG_GLOBS = ('*.jpg', '*.jpeg', '*.png')
-THUMBNAIL_SIZES = {'S': 420}
+THUMBNAIL_SIZES = {'S': 345}
 THUMBNAIL_SIZE_ITEMS = list(THUMBNAIL_SIZES.items())
+
 
 def to_grid(arr, numCols):
     """ Convert list to grid (list of lists) """
