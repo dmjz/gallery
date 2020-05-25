@@ -1,4 +1,5 @@
 import os
+import shutil
 import json
 import uuid
 import time
@@ -221,6 +222,8 @@ class WindowManager():
     resizeButtonKey = 'resize_button'
     sortRatingButtonKey = 'sort_rating_button'
     sortNameButtonKey = 'sort_name_button'
+    copyButtonKey = 'copy_button'
+    copyInputKey = 'copy_input'
     thumbSize = 'S'
     imgDim = THUMBNAIL_SIZES[thumbSize]
     gridRows = 2
@@ -291,6 +294,9 @@ class WindowManager():
             if event == self.resizeButtonKey:
                 if self.folder:
                     self.kickoff_resize_threads()
+            if event == self.copyButtonKey:
+                if self.folder and values[self.copyInputKey]:
+                    self.copy_to_subfolder(dest=values[self.copyInputKey])
 
             # Poll queue and update images
             records = self.batch_poll_img_queue(batchSize=8)
@@ -312,6 +318,12 @@ class WindowManager():
                 break
         return records
 
+    def get_selected_images(self):
+        return [
+            img for img in self.folderData.images()
+            if self.window[ImageKey(img, 'check')].get()
+        ]
+
     def kickoff_thumb_threads(self):
         print('Kick off thumbnail thread')
         src = self.folderData.openFolderPath
@@ -321,10 +333,7 @@ class WindowManager():
     def kickoff_resize_threads(self):
         print('Kick off resize thread')
         src = self.folderData.openFolderPath
-        selected = [
-            img for img in self.folderData.images()
-            if self.window[ImageKey(img, 'check')].get()
-        ]
+        selected = self.get_selected_images()
         newSize = self.window[self.resizeInputKey].get()
         try:
             newSize = float(newSize)
@@ -374,6 +383,41 @@ class WindowManager():
             sg.Popup('Cannot open images on this OS', title='Unsupported OS')
             print('Invalid platform, no action taken')
 
+    def copy_to_subfolder(self, dest):
+        """ Copy selected images to subfolder dest in gallery dir """
+
+        src = self.folderData.openFolderPath
+        selected = self.get_selected_images()
+        if not selected:
+            sg.Popup('No images selected', title='None selected')
+            return
+        newSubfolder = os.path.join(src, dest)
+        try:
+            os.makedirs(newSubfolder, exist_ok=True)
+        except Exception as e:
+            sg.popup(
+                'Failed to make subfolder. Perhaps the name is invalid on your OS?',
+                title='New subfolder failed',
+            )
+            print('Exception while making subfolder:')
+            print(e)
+            return
+        try:
+            for img in selected:
+                shutil.copy2(os.path.join(src, img), newSubfolder)
+        except Exception as e:
+            sg.popup(
+                'Unable to copy files. This may be due to permission errors or OS errors.',
+                title='Copy failed',
+            )
+            print('Exception while copying files:')
+            print(e)
+            return
+        sg.popup(
+            f'Copied { len(selected) } { "file" if len(selected) == 1 else "files" }', 
+            title='Success!'
+        )
+
     def menu_layout(self):
         resizeFrame = sg.Frame(
             'Resize',
@@ -390,6 +434,13 @@ class WindowManager():
                 sg.Button('By Name', key=self.sortNameButtonKey, enable_events=True),
             ]]
         )
+        moveFrame = sg.Frame(
+            'Copy to subfolder',
+            [[
+                sg.Button('Copy to:', key=self.copyButtonKey, enable_events=True),
+                sg.InputText('', key=self.copyInputKey, size=(12,1), enable_events=False),
+            ]]
+        )
         openGalleryFrame = sg.Frame(
             'Open gallery',
             [[
@@ -398,7 +449,7 @@ class WindowManager():
             ]]
         )
         return [
-            resizeFrame, sortFrame, openGalleryFrame, 
+            resizeFrame, sortFrame, moveFrame, openGalleryFrame, 
             sg.InputText(key=self.selectFolderKey, enable_events=True, visible=False),
         ]
 

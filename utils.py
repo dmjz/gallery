@@ -8,7 +8,7 @@ from multiprocessing import Pool
 
 
 IMG_GLOBS = ('*.jpg', '*.jpeg', '*.png')
-THUMBNAIL_SIZES = {'S': 345}
+THUMBNAIL_SIZES = {'S': 440}
 THUMBNAIL_SIZE_ITEMS = list(THUMBNAIL_SIZES.items())
 
 
