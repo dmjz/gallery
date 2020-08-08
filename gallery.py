@@ -225,7 +225,10 @@ class WindowManager():
     thumbSize = 'S'
     imgDim = THUMBNAIL_SIZES[thumbSize]
     loadingThumbPath = THUMBNAIL_LOAD_PATHS[thumbSize]
-    gridCols = 4
+    screenWidth, _ = sg.Window.get_screen_size()
+    scrollBarWidth = 20
+    frameExcessWidth = 28
+    gridCols = max(1, math.floor((screenWidth - scrollBarWidth)/(imgDim + frameExcessWidth)))
     folderData = FolderData()
     folderSettings = {
         'thumbSize': thumbSize,
