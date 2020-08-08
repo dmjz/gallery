@@ -224,7 +224,7 @@ class WindowManager():
     copyInputKey = 'copy_input'
     thumbSize = 'S'
     imgDim = THUMBNAIL_SIZES[thumbSize]
-    gridRows = 2
+    loadingThumbPath = THUMBNAIL_LOAD_PATHS[thumbSize]
     gridCols = 4
     folderData = FolderData()
     folderSettings = {
@@ -508,7 +508,7 @@ class WindowManager():
                 'row': rowData['row'],
                 'col': col,
                 'img': data['name'],
-                'thumb': 'imgs/loading_thumb.png', #data['thumb'],
+                'thumb': self.loadingThumbPath, #data['thumb'],
             })
             for col, data in enumerate(rowData['imageDatas'])
             if data
