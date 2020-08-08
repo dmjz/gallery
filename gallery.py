@@ -11,9 +11,7 @@ import concurrent.futures
 from multiprocessing import Pool, Queue
 import PySimpleGUI as sg
 from PIL import Image
-from utils import \
-    to_grid, list_images, make_thumbnails, THUMBNAIL_SIZES, \
-    image_size, thumbnails, backup_and_resize, open_image
+from utils import *
 
 sg.theme('Dark Blue')
 sg.SetOptions(window_location=(-6,0))
@@ -157,7 +155,7 @@ class FolderData():
 
 
 class ThreadedThumbApp(threading.Thread):
-    """ Retreive thumbnails in a thread parallel to main window thread """
+    """ Retrieve thumbnails in a thread parallel to main window thread """
 
     def __init__(self, windowManager, src, dest, images):
         super().__init__()
@@ -251,8 +249,8 @@ class WindowManager():
     def window_event_loop(self):
         while True:
             event, values = self.window.read(timeout=100)
-            if event and event != '__TIMEOUT__':
-                print('-- Event:\n', event, values)
+            # if event and event != '__TIMEOUT__':
+            #     print('-- Event:\n', event, values)
 
             # Handle events
             if event is None:
@@ -454,8 +452,6 @@ class WindowManager():
         ]
 
     def gallery_element(self, elemData):
-        # print('Received gallery element elem data:')
-        # print(elemData)
         image = os.path.basename(elemData['img'])
         title = image
         # imgSize = image_size(elemData['thumb'])
