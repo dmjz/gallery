@@ -11,9 +11,7 @@
 
 ### Run instructions
 
-You will need:
-- Python 3
-- pip
+You will need [Python 3](https://www.python.org/downloads/) with [pip](https://pip.pypa.io/en/stable/installing/).
 
 1. Clone this github repo OR download and unzip this repo
 2. Go the downloaded project directory and run: ```pip install -r .\requirements.txt```
